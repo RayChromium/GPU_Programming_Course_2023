@@ -23,12 +23,14 @@ float *ra_sim_gm, *decl_sim_gm;
 // number of simulated random galaxies
 int    NoofSim;
 
-const int numBins = 180 / 0.25;
+const float binWidth = 0.25;
+const int numBins = 180 / binWidth;
 // we already know the number of bins in the histogram, so in host memory no need to malloc:
 // unsigned int *histogramDR, *histogramDD, *histogramRR;
 unsigned int histogramDR[numBins] = {0};
 unsigned int histogramDD[numBins] = {0};
 unsigned int histogramRR[numBins] = {0};
+float omega[numBins] = {0};
 // but still need cudaMalloc on device memory:
 unsigned int *histogramDR_gm, *histogramDD_gm, *histogramRR_gm;
 
@@ -65,6 +67,21 @@ __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float
             int bin = (int)( calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
             atomicAdd(&rr[bin], 1);
         }
+    }
+}
+
+void calculateOmega() {
+    for( int i = 0; i < numBins; ++i ) {
+        if( histogramRR[i] != 0 ) {
+            omega[i] = (float)( histogramDD[i] - 2 * histogramDR[i] + histogramRR[i] ) / histogramRR[i];
+        }
+    }
+}
+
+void printResult() {
+    printf("bin start/deg\t\tomega\t\thist_DD\t\thist_DR\t\thist_RR\n");
+    for( int i = 0; i < numBins; ++i ){
+        printf("%.3f\t\t%.6f\t\t%u\t\t%u\t\t%u\n", i * binWidth, omega[i], histogramDD[i], histogramDR[i], histogramRR[i] );
     }
 }
 
@@ -118,9 +135,13 @@ int main(int argc, char *argv[])
    calculateHistograms<< blocksInGrid, threadsInBlock >>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, NoofReal, NoofSim );
 
    // copy the results back to the CPU
+   cudaMemcpy( histogramDD, histogramDD_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
+   cudaMemcpy( histogramDR, histogramDR_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
+   cudaMemcpy( histogramRR, histogramRR_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
 
    // calculate omega values on the CPU
-
+   calculateOmega();
+   printResult();
 
    // end timing
    gettimeofday(&_ttime, &_tzone);
@@ -233,9 +254,7 @@ int readdata(char *argv1, char *argv2)
       }
 
   return(0);
-}
-
-__global__ 
+} 
 
 
 int getDevice(int deviceNo)
