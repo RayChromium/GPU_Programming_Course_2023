@@ -1,6 +1,8 @@
 # ÅAU GPU Programming 2023 (IT00CG19-3002)  
   
 FYI: I'm just trying to figure out how to solve the problem given from the lectures, here's just my thoughts on it, and I assume **it may not be the correct/only answer**.  
+  
+
 
 ## Background  
 The final project is to solve a problem given from the slides using cuda programming. Problem is here:    
@@ -237,6 +239,41 @@ There are 4 Tesla V100-PCIE-16GB, maximun number of threads per block is 1024, a
   
 ### Normalization and calculating the eveness between R and D   
   
+The input data contains ``N = 100000`` real galaxy coordinates and ``N = 100000`` random generated galaxy coordinates. Because we would calculate the angle between each 2 coordinates inside the set, for histogram ``DD`` or ``RR``, the sum of each bin would be the combination counts of selecting 2 from N:  
+![C_N_2](images/C_N_2.svg)  
+  
+Therefore I believe we can replace the outer loop with a if statement to see if the index is within the range of ``N = 100000``( or ``NoofReal`` / ``NoofSim`` / ``numD`` / ``numR``, the same thing ):  
+```cpp
+int threadsInBlock = 256;
+int blocksInGrid = ( max( NoofReal, NoofSim ) + threadsInBlock - 1) / threadsInBlock;
+calculateHistograms<< blocksInGrid, threadsInBlock >>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, NoofReal, NoofSim );
+```  
+  
+And the function `calculateHistograms()` for calculating histogram can be modified like this:  
+```cpp
+__global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, int* dd, int* dr, int* rr, int numD, int numR) {
+    int index = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if( index < numD ) {
+        for (int j = index + 1; j < numD; j++) {
+            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25 );
+            atomicAdd(&dd[bin], 1);
+        }
+
+        for (int j = 0; j < numR; j++) {
+            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            atomicAdd(&dr[bin], 1);
+        }
+    }
+
+    if( index < numR )  {
+        for (int j = index + 1; j < numR; j++) {
+            int bin = (int)( calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            atomicAdd(&rr[bin], 1);
+        }
+    }
+}
+```
 
 
 ### Visualizing  

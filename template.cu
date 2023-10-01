@@ -47,23 +47,22 @@ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_
 
 __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, int* dd, int* dr, int* rr, int numD, int numR) {
     int index = threadIdx.x + blockIdx.x * blockDim.x;
-    int stride = blockDim.x * gridDim.x;
 
-    for (int i = index; i < numD; i += stride) {
-        for (int j = i + 1; j < numD; j++) {
-            int bin = (int)( calculateAngularDistance(d_ra_real[i], d_decl_real[i], d_ra_real[j], d_decl_real[j]) / 0.25 );
+    if( index < numD ) {
+        for (int j = index + 1; j < numD; j++) {
+            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25 );
             atomicAdd(&dd[bin], 1);
         }
 
         for (int j = 0; j < numR; j++) {
-            int bin = (int)( calculateAngularDistance(d_ra_real[i], d_decl_real[i], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
             atomicAdd(&dr[bin], 1);
         }
     }
 
-    for (int i = index; i < numR; i += stride) {
-        for (int j = i + 1; j < numR; j++) {
-            int bin = (int)( calculateAngularDistance(r_ra_sim[i], r_decl_sim[i], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+    if( index < numR )  {
+        for (int j = index + 1; j < numR; j++) {
+            int bin = (int)( calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
             atomicAdd(&rr[bin], 1);
         }
     }
@@ -114,6 +113,9 @@ int main(int argc, char *argv[])
    cudaMemcpy( decl_sim_gm, decl_sim, NoofSim*sizeof(float), cudaMemcpyHostToDevice );
 
    // run the kernels on the GPU
+   int threadsInBlock = 256;
+   int blocksInGrid = ( max( NoofReal, NoofSim ) + threadsInBlock - 1) / threadsInBlock;
+   calculateHistograms<< blocksInGrid, threadsInBlock >>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, NoofReal, NoofSim );
 
    // copy the results back to the CPU
 
