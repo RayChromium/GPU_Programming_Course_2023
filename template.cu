@@ -8,6 +8,7 @@
 #define binsperdegree 4
 #define threadsperblock 512
 
+
 // data for the real galaxies will be read into these arrays
 float *ra_real, *decl_real;
 // data for the real galaxies, on GPU mem
@@ -22,7 +23,52 @@ float *ra_sim_gm, *decl_sim_gm;
 // number of simulated random galaxies
 int    NoofSim;
 
-unsigned int *histogramDR, *histogramDD, *histogramRR;
+const int numBins = 180 / 0.25;
+// we already know the number of bins in the histogram, so in host memory no need to malloc:
+// unsigned int *histogramDR, *histogramDD, *histogramRR;
+unsigned int histogramDR[numBins] = {0};
+unsigned int histogramDD[numBins] = {0};
+unsigned int histogramRR[numBins] = {0};
+// but still need cudaMalloc on device memory:
+unsigned int *histogramDR_gm, *histogramDD_gm, *histogramRR_gm;
+
+float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_dec) {
+    // turning arc minutes to degree
+    float ra1 = g1_ra * M_PI / 180.0;
+    float dec1 = g1_dec * M_PI / 180.0;
+    float ra2 = g2_ra * M_PI / 180.0;
+    float dec2 = g2_dec * M_PI / 180.0;
+
+    // calculate angular distance
+    float delta_ra = ra2 - ra1;
+    float cos_c = sin(dec1) * sin(dec2) + cos(dec1) * cos(dec2) * cos(delta_ra);
+    float c = acos(cos_c);
+}
+
+__global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, int* dd, int* dr, int* rr, int numD, int numR) {
+    int index = threadIdx.x + blockIdx.x * blockDim.x;
+    int stride = blockDim.x * gridDim.x;
+
+    for (int i = index; i < numD; i += stride) {
+        for (int j = i + 1; j < numD; j++) {
+            int bin = (int)( calculateAngularDistance(d_ra_real[i], d_decl_real[i], d_ra_real[j], d_decl_real[j]) / 0.25 );
+            atomicAdd(&dd[bin], 1);
+        }
+
+        for (int j = 0; j < numR; j++) {
+            int bin = (int)( calculateAngularDistance(d_ra_real[i], d_decl_real[i], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            atomicAdd(&dr[bin], 1);
+        }
+    }
+
+    for (int i = index; i < numR; i += stride) {
+        for (int j = i + 1; j < numR; j++) {
+            int bin = (int)( calculateAngularDistance(r_ra_sim[i], r_decl_sim[i], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            atomicAdd(&rr[bin], 1);
+        }
+    }
+}
+
 unsigned int *d_histogram;
 
 
@@ -43,7 +89,12 @@ int main(int argc, char *argv[])
 
    if ( argc != 4 ) {printf("Usage: a.out real_data random_data output_data\n");return(-1);}
 
-   if ( getDevice(0) != 0 ) return(-1);
+//    if ( getDevice(0) != 0 ) return(-1);
+
+   // start timing 
+   kerneltime = 0.0;
+   gettimeofday(&_ttime, &_tzone);
+   start = (double)_ttime.tv_sec + (double)_ttime.tv_usec/1000000.;
 
    if ( readdata(argv[1], argv[2]) != 0 ) return(-1);
 
@@ -52,6 +103,9 @@ int main(int argc, char *argv[])
    cudaMalloc( &decl_real_gm,   NoofReal*sizeof(float) );
    cudaMalloc( &ra_sim_gm,      NoofSim*sizeof(float) );
    cudaMalloc( &decl_sim_gm,    NoofSim*sizeof(float) );
+   cudaMalloc( &histogramDR_gm,    numBins*sizeof(unsigned int) );
+   cudaMalloc( &histogramDD_gm,    numBins*sizeof(unsigned int) );
+   cudaMalloc( &histogramRR_gm,    numBins*sizeof(unsigned int) );
 
    // copy data to the GPU
    cudaMemcpy( ra_real_gm, ra_real, NoofReal*sizeof(float), cudaMemcpyHostToDevice );
@@ -65,10 +119,8 @@ int main(int argc, char *argv[])
 
    // calculate omega values on the CPU
 
-   kerneltime = 0.0;
-   gettimeofday(&_ttime, &_tzone);
-   start = (double)_ttime.tv_sec + (double)_ttime.tv_usec/1000000.;
 
+   // end timing
    gettimeofday(&_ttime, &_tzone);
    end = (double)_ttime.tv_sec + (double)_ttime.tv_usec/1000000.;
    kerneltime += end-start;
