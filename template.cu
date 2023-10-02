@@ -36,10 +36,10 @@ unsigned int *histogramDR_gm, *histogramDD_gm, *histogramRR_gm;
 
 float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_dec) {
     // turning arc minutes to degree
-    float ra1 = g1_ra * M_PI / 180.0;
-    float dec1 = g1_dec * M_PI / 180.0;
-    float ra2 = g2_ra * M_PI / 180.0;
-    float dec2 = g2_dec * M_PI / 180.0;
+    float ra1 = g1_ra/ 60 * M_PI / 180.0;
+    float dec1 = g1_dec/ 60 * M_PI / 180.0;
+    float ra2 = g2_ra/ 60 * M_PI / 180.0;
+    float dec2 = g2_dec/ 60 * M_PI / 180.0;
 
     // calculate angular distance
     float delta_ra = ra2 - ra1;
@@ -114,11 +114,13 @@ int main(int argc, char *argv[])
 
    if ( readdata(argv[1], argv[2]) != 0 ) return(-1);
 
-   // allocate mameory on the GPU
+   // allocate mameory on the GPU --> Better use Managed
    cudaMalloc( &ra_real_gm,     NoofReal*sizeof(float) );
    cudaMalloc( &decl_real_gm,   NoofReal*sizeof(float) );
    cudaMalloc( &ra_sim_gm,      NoofSim*sizeof(float) );
    cudaMalloc( &decl_sim_gm,    NoofSim*sizeof(float) );
+
+// Better to use cudaMallocManaged in order to allocate memory in Gpu and use it directly in the Gpu (we do not have to use Memcopy)
    cudaMalloc( &histogramDR_gm,    numBins*sizeof(unsigned int) );
    cudaMalloc( &histogramDD_gm,    numBins*sizeof(unsigned int) );
    cudaMalloc( &histogramRR_gm,    numBins*sizeof(unsigned int) );
