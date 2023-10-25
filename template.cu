@@ -57,27 +57,28 @@ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_
 __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, int* dd, int* dr, int* rr, int numD, int numR) {
     int index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    if( index < numD ) {
-        for (int j = index + 1; j < numD; j++) {
+    if (index < numD) {
+        for (int j = 0; j < numD; j++) {
             if (j == index) continue; // Skip the case where i == j
-            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25 );
+            int bin = (int)(calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25);
             atomicAdd(&dd[bin], 1);
         }
 
         for (int j = 0; j < numR; j++) {
-            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            int bin = (int)(calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25);
             atomicAdd(&dr[bin], 1);
         }
     }
 
-    if( index < numR )  {
-        for (int j = index + 1; j < numR; j++) {
+    if (index < numR) {
+        for (int j = 0; j < numR; j++) {
             if (j == index) continue; // Skip the case where i == j
-            int bin = (int)( calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            int bin = (int)(calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25);
             atomicAdd(&rr[bin], 1);
         }
     }
 }
+
 
 void calculateOmega() {
     for( int i = 0; i < numBins; ++i ) {
