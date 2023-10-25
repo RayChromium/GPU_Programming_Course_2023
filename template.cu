@@ -59,6 +59,7 @@ __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float
 
     if( index < numD ) {
         for (int j = index + 1; j < numD; j++) {
+            if (j == index) continue; // Skip the case where i == j
             int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25 );
             atomicAdd(&dd[bin], 1);
         }
@@ -71,6 +72,7 @@ __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float
 
     if( index < numR )  {
         for (int j = index + 1; j < numR; j++) {
+            if (j == index) continue; // Skip the case where i == j
             int bin = (int)( calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
             atomicAdd(&rr[bin], 1);
         }
