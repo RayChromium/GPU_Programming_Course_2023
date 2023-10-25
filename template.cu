@@ -11,15 +11,20 @@
 
 // data for the real galaxies will be read into these arrays
 float *ra_real, *decl_real;
+
 // data for the real galaxies, on GPU mem
 float *ra_real_gm, *decl_real_gm;
+
+
 // number of real galaxies
-int    NoofReal;
+int NoofReal;
 
 // data for the simulated random galaxies will be read into these arrays
 float *ra_sim, *decl_sim;
+
 // data for the simulated random galaxies read&copied into GPU mem
 float *ra_sim_gm, *decl_sim_gm;
+
 // number of simulated random galaxies
 int    NoofSim;
 
@@ -31,10 +36,12 @@ unsigned int histogramDR[numBins] = {0};
 unsigned int histogramDD[numBins] = {0};
 unsigned int histogramRR[numBins] = {0};
 float omega[numBins] = {0};
+
 // but still need cudaMalloc on device memory:
 unsigned int *histogramDR_gm, *histogramDD_gm, *histogramRR_gm;
 
 float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_dec) {
+
     // turning arc minutes to degree
     float ra1 = g1_ra/ 60 * M_PI / 180.0;
     float dec1 = g1_dec/ 60 * M_PI / 180.0;
