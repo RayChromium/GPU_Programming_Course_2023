@@ -94,13 +94,13 @@ void calculateOmega() {
     }
 }
 
-void printResult() {
-    printf("bin start/deg\t\tomega\t\thist_DD\t\thist_DR\t\thist_RR\n");
+void printResult( FILE *outfil ) {
+    fprintf( outfil, "bin start/deg\t\tomega\t\thist_DD\t\thist_DR\t\thist_RR\n");
     for( int i = 0; i < numBins; ++i ){
         if(histogramDD[i] == 0) {
             break;
         }
-        printf("%.3f\t\t%.6f\t\t%u\t\t%u\t\t%u\n", i * binWidth, omega[i], histogramDD[i], histogramDR[i], histogramRR[i] );
+        fprintf( outfil, "%.3f\t\t%.6f\t\t%u\t\t%u\t\t%u\n", i * binWidth, omega[i], histogramDD[i], histogramDR[i], histogramRR[i] );
     }
 }
 
@@ -165,7 +165,10 @@ int main(int argc, char *argv[])
 
    // calculate omega values on the CPU
    calculateOmega();
-   printResult();
+
+   outfil = fopen(argv[3], "w");
+   printResult(outfil);
+   fclose(outfil);
 
    cudaFree(ra_real_gm);
    cudaFree(decl_real_gm);
