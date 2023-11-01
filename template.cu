@@ -65,29 +65,24 @@ __device__ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra
 
 }
 
-__global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, unsigned int* dd, unsigned int* dr, unsigned int* rr, int numD, int numR) {
+__global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, unsigned int* dd, unsigned int* dr, unsigned int* rr, int maxInputLength) {
     long int index = (long int)(threadIdx.x + blockIdx.x * blockDim.x);
 
-    if (index < numD) {
-        for (int j = 0; j < numD; j++) {
-            if (j == index) continue; // Skip the case where i == j
-            int bin = (int)(calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25);
-            atomicAdd(&dd[bin], 1);
-        }
-
-        for (int j = 0; j < numR; j++) {
-            int bin = (int)(calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25);
-            atomicAdd(&dr[bin], 1);
-        }
+    if (index >= (long int)maxInputLength * maxInputLength) {
+        return;
     }
 
-    if (index < numR) {
-        for (int j = 0; j < numR; j++) {
-            if (j == index) continue; // Skip the case where i == j
-            int bin = (int)(calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25);
-            atomicAdd(&rr[bin], 1);
-        }
-    }
+    int i = index / maxInputLength;
+    int j = index % maxInputLength;
+
+    int bin_dd = (int)(calculateAngularDistance(d_ra_real[i], d_decl_real[i], d_ra_real[j],d_decl_real[j]) / 0.25);
+    atomicAdd(&dd[bin_dd], 1);
+
+    int bin_dr = (int)(calculateAngularDistance(d_ra_real[i], d_decl_real[i], r_ra_sim[j],r_decl_sim[j]) / 0.25);
+    atomicAdd(&dr[bin_dr], 1);
+
+    int bin_rr = (int)(calculateAngularDistance(r_ra_sim[i], r_decl_sim[i], r_ra_sim[j], r_decl_sim[j]) / 0.25);
+    atomicAdd(&rr[bin_rr], 1);
 }
 
 
@@ -158,9 +153,10 @@ int main(int argc, char *argv[])
    cudaMemset( histogramDD_gm, 0, numBins*sizeof(unsigned int) );
    cudaMemset( histogramRR_gm, 0, numBins*sizeof(unsigned int) );
 
-   
-   noofblocks = (int)(( (NoofReal > NoofSim ? NoofReal : NoofSim) + threadsperblock - 1) / threadsperblock);
-   calculateHistograms<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, NoofReal, NoofSim );
+   // check to see which array of coordinates are longer, use that longer length as range
+   const int maxInputLength = (NoofReal > NoofSim ? NoofReal : NoofSim);
+   noofblocks = (int)(( maxInputLength * maxInputLength + threadsperblock - 1) / threadsperblock);
+   calculateHistograms<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, maxInputLength );
 
    // copy the results back to the CPU
    cudaMemcpy( histogramDD, histogramDD_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
