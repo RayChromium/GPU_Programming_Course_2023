@@ -11,15 +11,20 @@
 
 // data for the real galaxies will be read into these arrays
 float *ra_real, *decl_real;
+
 // data for the real galaxies, on GPU mem
 float *ra_real_gm, *decl_real_gm;
+
+
 // number of real galaxies
-int    NoofReal;
+int NoofReal;
 
 // data for the simulated random galaxies will be read into these arrays
 float *ra_sim, *decl_sim;
+
 // data for the simulated random galaxies read&copied into GPU mem
 float *ra_sim_gm, *decl_sim_gm;
+
 // number of simulated random galaxies
 int    NoofSim;
 
@@ -31,6 +36,7 @@ unsigned int histogramDR[numBins] = {0};
 unsigned int histogramDD[numBins] = {0};
 unsigned int histogramRR[numBins] = {0};
 float omega[numBins] = {0};
+
 // but still need cudaMalloc on device memory:
 unsigned int *histogramDR_gm, *histogramDD_gm, *histogramRR_gm;
 
@@ -62,25 +68,28 @@ __device__ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra
 __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, unsigned int* dd, unsigned int* dr, unsigned int* rr, int numD, int numR) {
     long int index = (long int)(threadIdx.x + blockIdx.x * blockDim.x);
 
-    if( index < numD ) {
-        for (int j = index + 1; j < numD; j++) {
-            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25 );
+    if (index < numD) {
+        for (int j = 0; j < numD; j++) {
+            if (j == index) continue; // Skip the case where i == j
+            int bin = (int)(calculateAngularDistance(d_ra_real[index], d_decl_real[index], d_ra_real[j], d_decl_real[j]) / 0.25);
             atomicAdd(&dd[bin], 1);
         }
 
         for (int j = 0; j < numR; j++) {
-            int bin = (int)( calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+            int bin = (int)(calculateAngularDistance(d_ra_real[index], d_decl_real[index], r_ra_sim[j], r_decl_sim[j]) / 0.25);
             atomicAdd(&dr[bin], 1);
         }
     }
 
-    if( index < numR )  {
-        for (int j = index + 1; j < numR; j++) {
-            int bin = (int)( calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25 );
+    if (index < numR) {
+        for (int j = 0; j < numR; j++) {
+            if (j == index) continue; // Skip the case where i == j
+            int bin = (int)(calculateAngularDistance(r_ra_sim[index], r_decl_sim[index], r_ra_sim[j], r_decl_sim[j]) / 0.25);
             atomicAdd(&rr[bin], 1);
         }
     }
 }
+
 
 void calculateOmega() {
     for( int i = 0; i < numBins; ++i ) {
