@@ -49,7 +49,7 @@ __device__ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra
 
     // calculate angular distance
     float delta_ra = ra2 - ra1;
-    float cos_c = sin(dec1) * sin(dec2) + cos(dec1) * cos(dec2) * cos(delta_ra);
+    float cos_c = sinf(dec1) * sinf(dec2) + cosf(dec1) * cosf(dec2) * cosf(delta_ra);
     if (cos_c > 1.0) {
         cos_c = 1.0;
     } else if (cos_c < -1.0) {
