@@ -65,7 +65,7 @@ __device__ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra
 
 }
 
-__global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, unsigned int* dd, unsigned int* dr, unsigned int* rr, int maxInputLength) {
+__global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, unsigned int* dd, unsigned int* dr, unsigned int* rr, long int maxInputLength) {
     long int index = (long int)(threadIdx.x + blockIdx.x * blockDim.x);
 
     if (index >= (long int)maxInputLength * maxInputLength) {
@@ -86,10 +86,13 @@ __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float
 }
 
 
-void calculateOmega() {
+void calculateOmega( long int* histogramDRsum, long int* histogramDDsum, long int* histogramRRsum ) {
     for( int i = 0; i < numBins; ++i ) {
         if( histogramRR[i] != 0 ) {
-            omega[i] = (float)( histogramDD[i] - 2 * histogramDR[i] + histogramRR[i] ) / histogramRR[i];
+            omega[i] = (float)( histogramDD[i] - 2.0f * histogramDR[i] + histogramRR[i] ) / histogramRR[i];
+            *histogramDDsum += histogramDD[i];
+            *histogramDRsum += histogramDR[i];
+            *histogramRRsum += histogramRR[i];
         }
     }
 }
@@ -99,6 +102,9 @@ void printResult( FILE *outfil ) {
     for( int i = 0; i < numBins; ++i ){
         if(histogramDD[i] == 0) {
             break;
+        }
+        if( i < 10 ) {
+            printf("%.3f\t\t%.6f\t\t%u\t\t%u\t\t%u\n", i * binWidth, omega[i], histogramDD[i], histogramDR[i], histogramRR[i]);
         }
         fprintf( outfil, "%.3f\t\t%.6f\t\t%u\t\t%u\t\t%u\n", i * binWidth, omega[i], histogramDD[i], histogramDR[i], histogramRR[i] );
     }
@@ -110,7 +116,7 @@ unsigned int *d_histogram;
 int main(int argc, char *argv[])
 {
    int    i;
-   int    noofblocks;
+   long int    noofblocks;
    int    readdata(char *argv1, char *argv2);
    int    getDevice(int deviceno);
    long int histogramDRsum, histogramDDsum, histogramRRsum;
@@ -154,8 +160,11 @@ int main(int argc, char *argv[])
    cudaMemset( histogramRR_gm, 0, numBins*sizeof(unsigned int) );
 
    // check to see which array of coordinates are longer, use that longer length as range
-   const int maxInputLength = (NoofReal > NoofSim ? NoofReal : NoofSim);
-   noofblocks = (int)(( maxInputLength * maxInputLength + threadsperblock - 1) / threadsperblock);
+   const long int maxInputLength = (NoofReal > NoofSim ? NoofReal : NoofSim);
+   noofblocks = (long int)(( maxInputLength * maxInputLength + threadsperblock - 1) / threadsperblock);
+   printf("size of threadblocks (threads per block): %d\n", threadsperblock);
+   printf("number of threadblocks: %ld\n", noofblocks);
+   printf("number of threads: %ld\n", noofblocks*threadsperblock);
    calculateHistograms<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, maxInputLength );
 
    // copy the results back to the CPU
@@ -164,10 +173,11 @@ int main(int argc, char *argv[])
    cudaMemcpy( histogramRR, histogramRR_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
 
    // calculate omega values on the CPU
-   calculateOmega();
+   calculateOmega( &histogramDRsum, &histogramDDsum, &histogramRRsum);
 
    outfil = fopen(argv[3], "w");
    printResult(outfil);
+   printf("sums of histogram DD: %ld, histogram DR: %ld, histogram RR: %ld\n", histogramDDsum, histogramDRsum, histogramRRsum);
    fclose(outfil);
 
    cudaFree(ra_real_gm);
@@ -182,6 +192,8 @@ int main(int argc, char *argv[])
    gettimeofday(&_ttime, &_tzone);
    end = (double)_ttime.tv_sec + (double)_ttime.tv_usec/1000000.;
    kerneltime += end-start;
+
+   printf("time: %f s\n", kerneltime);
 
    return(0);
 }
