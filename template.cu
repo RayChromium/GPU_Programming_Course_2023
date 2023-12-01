@@ -145,19 +145,21 @@ int main(int argc, char *argv[])
    cudaMalloc( &ra_sim_gm,      NoofSim*sizeof(float) );
    cudaMalloc( &decl_sim_gm,    NoofSim*sizeof(float) );
 
+   const int histogramSize = numBins*sizeof(unsigned int);
+
 // Better to use cudaMallocManaged in order to allocate memory in Gpu and use it directly in the Gpu (we do not have to use Memcopy)
-   cudaMalloc( &histogramDR_gm,    numBins*sizeof(unsigned int) );
-   cudaMalloc( &histogramDD_gm,    numBins*sizeof(unsigned int) );
-   cudaMalloc( &histogramRR_gm,    numBins*sizeof(unsigned int) );
+   cudaMalloc( &histogramDR_gm,    histogramSize );
+   cudaMalloc( &histogramDD_gm,    histogramSize );
+   cudaMalloc( &histogramRR_gm,    histogramSize );
 
    // copy data to the GPU
    cudaMemcpy( ra_real_gm, ra_real, NoofReal*sizeof(float), cudaMemcpyHostToDevice );
    cudaMemcpy( decl_real_gm, decl_real, NoofReal*sizeof(float), cudaMemcpyHostToDevice );
    cudaMemcpy( ra_sim_gm, ra_sim, NoofSim*sizeof(float), cudaMemcpyHostToDevice );
    cudaMemcpy( decl_sim_gm, decl_sim, NoofSim*sizeof(float), cudaMemcpyHostToDevice );
-   cudaMemset( histogramDR_gm, 0, numBins*sizeof(unsigned int) );
-   cudaMemset( histogramDD_gm, 0, numBins*sizeof(unsigned int) );
-   cudaMemset( histogramRR_gm, 0, numBins*sizeof(unsigned int) );
+   cudaMemset( histogramDR_gm, 0, histogramSize );
+   cudaMemset( histogramDD_gm, 0, histogramSize );
+   cudaMemset( histogramRR_gm, 0, histogramSize );
 
    // check to see which array of coordinates are longer, use that longer length as range
    const long int maxInputLength = (NoofReal > NoofSim ? NoofReal : NoofSim);
@@ -167,12 +169,17 @@ int main(int argc, char *argv[])
    printf("number of threads: %ld\n", noofblocks*threadsperblock);
    calculateHistograms<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, maxInputLength );
 
+   
    // copy the results back to the CPU
-   cudaMemcpy( histogramDD, histogramDD_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
-   cudaMemcpy( histogramDR, histogramDR_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
-   cudaMemcpy( histogramRR, histogramRR_gm, numBins*sizeof(unsigned int), cudaMemcpyDeviceToHost );
+   cudaMemcpy( histogramDD, histogramDD_gm, histogramSize, cudaMemcpyDeviceToHost );
+   cudaMemcpy( histogramDR, histogramDR_gm, histogramSize, cudaMemcpyDeviceToHost );
+   cudaMemcpy( histogramRR, histogramRR_gm, histogramSize, cudaMemcpyDeviceToHost );
 
    // calculate omega values on the CPU
+   // initializing them to zero:
+   histogramDDsum = 0;
+   histogramRRsum = 0;
+   histogramDRsum = 0;
    calculateOmega( &histogramDRsum, &histogramDDsum, &histogramRRsum);
 
    outfil = fopen(argv[3], "w");
