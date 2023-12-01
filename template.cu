@@ -66,7 +66,7 @@ __device__ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra
 }
 
 __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float* r_ra_sim, float* r_decl_sim, unsigned int* dd, unsigned int* dr, unsigned int* rr, long int maxInputLength) {
-    long int index = (long int)(threadIdx.x + blockIdx.x * blockDim.x);
+    long int index = ((long int)threadIdx.x + (long int)blockIdx.x * (long int)blockDim.x);
 
     if (index >= (long int)maxInputLength * maxInputLength) {
         return;
@@ -83,6 +83,20 @@ __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float
 
     int bin_rr = (int)(calculateAngularDistance(r_ra_sim[i], r_decl_sim[i], r_ra_sim[j], r_decl_sim[j]) / 0.25);
     atomicAdd(&rr[bin_rr], 1);
+}
+
+__global__ void calculateSingleHistogram(float* ra1, float * decl1, float* ra2, float* decl2, unsigned int* histogram, long int maxInputLength) {
+    long int index = ((long int)threadIdx.x + (long int)blockIdx.x * (long int)blockDim.x);
+
+    if (index >= (long int)maxInputLength * maxInputLength) {
+        return;
+    }
+
+    int i = index / maxInputLength;
+    int j = index % maxInputLength;
+
+    int bin = (int)(calculateAngularDistance(ra1[i], decl1[i], ra2[j], decl2[j]) / 0.25);
+    atomicAdd(&histogram[bin], 1);
 }
 
 
@@ -168,6 +182,9 @@ int main(int argc, char *argv[])
    printf("number of threadblocks: %ld\n", noofblocks);
    printf("number of threads: %ld\n", noofblocks*threadsperblock);
    calculateHistograms<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDD_gm, histogramDR_gm, histogramRR_gm, maxInputLength );
+//    calculateSingleHistogram<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_real_gm, decl_real_gm, histogramDD_gm, maxInputLength );
+//    calculateSingleHistogram<<< noofblocks, threadsperblock >>>( ra_real_gm, decl_real_gm, ra_sim_gm, decl_sim_gm, histogramDR_gm, maxInputLength );
+//    calculateSingleHistogram<<< noofblocks, threadsperblock >>>( ra_sim_gm, decl_sim_gm, ra_sim_gm, decl_sim_gm, histogramRR_gm, maxInputLength );
 
    
    // copy the results back to the CPU
