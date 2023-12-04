@@ -7,6 +7,7 @@
 #define totaldegrees 180
 #define binsperdegree 4
 #define threadsperblock 512
+#define PI_F            3.141592654f
 
 
 // data for the real galaxies will be read into these arrays
@@ -28,7 +29,7 @@ float *ra_sim_gm, *decl_sim_gm;
 // number of simulated random galaxies
 int    NoofSim;
 
-const float binWidth = 0.25;
+const float binWidth = 0.25f;
 const int numBins = 180 / binWidth;
 // we already know the number of bins in the histogram, so in host memory no need to malloc:
 // unsigned int *histogramDR, *histogramDD, *histogramRR;
@@ -40,27 +41,32 @@ float omega[numBins] = {0};
 // but still need cudaMalloc on device memory:
 unsigned int *histogramDR_gm, *histogramDD_gm, *histogramRR_gm;
 
-__device__ float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_dec) {
+__device__ inline float calculateAngularDistance(float g1_ra, float g1_dec, float g2_ra, float g2_dec) {
     // turning arc minutes to degree
-    float ra1 = g1_ra/ 60 * M_PI / 180.0;
-    float dec1 = g1_dec/ 60 * M_PI / 180.0;
-    float ra2 = g2_ra/ 60 * M_PI / 180.0;
-    float dec2 = g2_dec/ 60 * M_PI / 180.0;
+    float ra1 = g1_ra/ 60.0f * PI_F / 180.0f;
+    float dec1 = g1_dec/ 60.0f * PI_F / 180.0f;
+    float ra2 = g2_ra/ 60.0f * PI_F / 180.0f;
+    float dec2 = g2_dec/ 60.0f * PI_F / 180.0f;
+    // float sin_ra1 = sinf(ra1);
+    // float sin_ra2 = sinf(ra2);
+    // float cos_ra1 = cosf(ra1);
+    // float cos_ra2 = cosf(ra2);
+
 
     // calculate angular distance
     float delta_ra = ra2 - ra1;
     float cos_c = sinf(dec1) * sinf(dec2) + cosf(dec1) * cosf(dec2) * cosf(delta_ra);
-    if (cos_c > 1.0) {
-        cos_c = 1.0;
-    } else if (cos_c < -1.0) {
-        cos_c = -1.0;
+    if (cos_c > 1.0f) {
+        cos_c = 1.0f;
+    } else if (cos_c < -1.0f) {
+        cos_c = -1.0f;
     }
     float c = acosf(cos_c);
 
     if (isnan(c) || isinf(c)) {
-        return 0.0;
+        return 0.0f;
     } else {
-        return c * 180 / M_PI;
+        return c * 180.0f / PI_F;
     }
 
 }
@@ -75,13 +81,13 @@ __global__ void calculateHistograms(float* d_ra_real, float * d_decl_real, float
     int i = index / maxInputLength;
     int j = index % maxInputLength;
 
-    int bin_dd = (int)(calculateAngularDistance(d_ra_real[i], d_decl_real[i], d_ra_real[j],d_decl_real[j]) / 0.25);
+    int bin_dd = (int)(calculateAngularDistance(d_ra_real[i], d_decl_real[i], d_ra_real[j],d_decl_real[j]) * 4.0f);
     atomicAdd(&dd[bin_dd], 1);
 
-    int bin_dr = (int)(calculateAngularDistance(d_ra_real[i], d_decl_real[i], r_ra_sim[j],r_decl_sim[j]) / 0.25);
+    int bin_dr = (int)(calculateAngularDistance(d_ra_real[i], d_decl_real[i], r_ra_sim[j],r_decl_sim[j]) * 4.0f);
     atomicAdd(&dr[bin_dr], 1);
 
-    int bin_rr = (int)(calculateAngularDistance(r_ra_sim[i], r_decl_sim[i], r_ra_sim[j], r_decl_sim[j]) / 0.25);
+    int bin_rr = (int)(calculateAngularDistance(r_ra_sim[i], r_decl_sim[i], r_ra_sim[j], r_decl_sim[j]) * 4.0f);
     atomicAdd(&rr[bin_rr], 1);
 }
 
@@ -95,7 +101,7 @@ __global__ void calculateSingleHistogram(float* ra1, float * decl1, float* ra2, 
     int i = index / maxInputLength;
     int j = index % maxInputLength;
 
-    int bin = (int)(calculateAngularDistance(ra1[i], decl1[i], ra2[j], decl2[j]) / 0.25);
+    int bin = (int)(calculateAngularDistance(ra1[i], decl1[i], ra2[j], decl2[j]) * 4.0f);
     atomicAdd(&histogram[bin], 1);
 }
 
@@ -154,10 +160,12 @@ int main(int argc, char *argv[])
    if ( readdata(argv[1], argv[2]) != 0 ) return(-1);
 
    // allocate mameory on the GPU --> Better use Managed
-   cudaMalloc( &ra_real_gm,     NoofReal*sizeof(float) );
-   cudaMalloc( &decl_real_gm,   NoofReal*sizeof(float) );
-   cudaMalloc( &ra_sim_gm,      NoofSim*sizeof(float) );
-   cudaMalloc( &decl_sim_gm,    NoofSim*sizeof(float) );
+   const unsigned long long real_axis_size = NoofReal*sizeof(float);
+   const unsigned long long sim_axis_size = NoofSim*sizeof(float);
+   cudaMalloc( &ra_real_gm,     real_axis_size );
+   cudaMalloc( &decl_real_gm,   real_axis_size );
+   cudaMalloc( &ra_sim_gm,      sim_axis_size );
+   cudaMalloc( &decl_sim_gm,    sim_axis_size );
 
    const int histogramSize = numBins*sizeof(unsigned int);
 
@@ -167,10 +175,10 @@ int main(int argc, char *argv[])
    cudaMalloc( &histogramRR_gm,    histogramSize );
 
    // copy data to the GPU
-   cudaMemcpy( ra_real_gm, ra_real, NoofReal*sizeof(float), cudaMemcpyHostToDevice );
-   cudaMemcpy( decl_real_gm, decl_real, NoofReal*sizeof(float), cudaMemcpyHostToDevice );
-   cudaMemcpy( ra_sim_gm, ra_sim, NoofSim*sizeof(float), cudaMemcpyHostToDevice );
-   cudaMemcpy( decl_sim_gm, decl_sim, NoofSim*sizeof(float), cudaMemcpyHostToDevice );
+   cudaMemcpy( ra_real_gm, ra_real, real_axis_size, cudaMemcpyHostToDevice );
+   cudaMemcpy( decl_real_gm, decl_real, real_axis_size, cudaMemcpyHostToDevice );
+   cudaMemcpy( ra_sim_gm, ra_sim, sim_axis_size, cudaMemcpyHostToDevice );
+   cudaMemcpy( decl_sim_gm, decl_sim, sim_axis_size, cudaMemcpyHostToDevice );
    cudaMemset( histogramDR_gm, 0, histogramSize );
    cudaMemset( histogramDD_gm, 0, histogramSize );
    cudaMemset( histogramRR_gm, 0, histogramSize );
